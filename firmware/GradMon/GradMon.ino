@@ -52,6 +52,10 @@ void doRefresh() {
   String cardId   = storage.getRefreshCardId();
   String priceKey = storage.getRefreshPriceKey();
   String currency = storage.getCurrency();
+  int    layout   = storage.getLayout();
+
+  uint8_t bmp[280];
+  bool hasBmp = (storage.getCardImage(bmp, 280) == 280);
 
   Serial.println("[refresh] cardId=" + cardId + " key=" + priceKey);
   oled.showText("Aggiornamento...", storage.getCardName().c_str());
@@ -64,15 +68,18 @@ void doRefresh() {
     String num   = storage.getRefreshCardNum();
     String grade = storage.getCardGrade();
 
-    oled.setCard(name, set, num, grade, formatted);
-    storage.saveCard(name, set, grade, formatted);
+    oled.setCard(name, set, num, grade, formatted, layout, hasBmp ? bmp : nullptr, 
+                 storage.getCardP2(), storage.getCardP3(), storage.getCardP4());
+    storage.saveCard(name, set, grade, formatted, storage.getCardP2(), storage.getCardP3(), storage.getCardP4());
     lastRefreshMs = millis();
     Serial.println("[refresh] OK: " + formatted);
   } else {
     // Mostra ugualmente i dati vecchi
     oled.setCard(storage.getCardName(), storage.getCardSet(),
                  storage.getRefreshCardNum(),
-                 storage.getCardGrade(), storage.getCardPrice());
+                 storage.getCardGrade(), storage.getCardPrice(), layout,
+                 hasBmp ? bmp : nullptr,
+                 storage.getCardP2(), storage.getCardP3(), storage.getCardP4());
     Serial.println("[refresh] ERR: " + err);
   }
   firstRefreshDone = true;
@@ -121,9 +128,13 @@ void setup() {
 
   // Mostra la carta salvata se non è stato fatto il refresh
   if (!firstRefreshDone && storage.getCardName().length()) {
+    uint8_t bmp[280];
+    bool hasBmp = (storage.getCardImage(bmp, 280) == 280);
     oled.setCard(storage.getCardName(), storage.getCardSet(),
                  storage.getRefreshCardNum(),
-                 storage.getCardGrade(), storage.getCardPrice());
+                 storage.getCardGrade(), storage.getCardPrice(),
+                 storage.getLayout(), hasBmp ? bmp : nullptr,
+                 storage.getCardP2(), storage.getCardP3(), storage.getCardP4());
   }
 }
 

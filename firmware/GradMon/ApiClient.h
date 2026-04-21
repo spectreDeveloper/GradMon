@@ -36,7 +36,7 @@ class ApiClient {
 
   // Aggiunge un'opzione prezzo all'array se il valore non è null/zero
   static void addPriceOpt(JsonArray& arr, const char* key, const char* label,
-                          const char* group, JsonVariant val, const char* currency) {
+                          const char* group, JsonVariantConst val, const char* currency) {
     if (val.isNull() || val.as<float>() <= 0) return;
     JsonObject o = arr.createNestedObject();
     o["key"]      = key;
@@ -57,56 +57,78 @@ class ApiClient {
       addPriceOpt(opts, "cm_7d",   "Media 7gg",    "Cardmarket", cm["7d_average"],          cur);
       addPriceOpt(opts, "cm_nm_de","NM (DE)",      "Cardmarket", cm["lowest_near_mint_DE"], cur);
       addPriceOpt(opts, "cm_nm_fr","NM (FR)",      "Cardmarket", cm["lowest_near_mint_FR"], cur);
-    }
-    // ── Graded ────────────────────────────────────────────────────────────────
-    if (prices.containsKey("graded")) {
-      JsonObject graded = prices["graded"].as<JsonObject>();
-      const char* grades[] = {"10","9_5","9","8_5","8","7","6","5","4","3","2","1"};
-      const char* labels[] = {"10","9.5","9","8.5","8","7","6","5","4","3","2","1"};
-      const char* graders[] = {"psa","bgs","cgc","sgc"};
-      const char* graderLabels[] = {"PSA","BGS","CGC","SGC"};
 
-      for (int gi = 0; gi < 4; gi++) {
-        if (!graded.containsKey(graders[gi])) continue;
-        JsonObject gr = graded[graders[gi]].as<JsonObject>();
-        for (int vi = 0; vi < 12; vi++) {
-          String key = String(graders[gi]) + grades[vi];   // "psa10", "bgs9_5"
-          String lbl = String(graderLabels[gi]) + " " + labels[vi]; // "PSA 10"
-          addPriceOpt(opts, key.c_str(), lbl.c_str(), graderLabels[gi],
-                      gr[key.c_str()], "EUR");
+      // ── Graded (ora dentro cardmarket nel nuovo JSON) ───────────────────────
+      if (cm.containsKey("graded")) {
+        JsonObject graded = cm["graded"].as<JsonObject>();
+        const char* grades[] = {"10","9_5","9","8_5","8","7","6","5","4","3","2","1"};
+        const char* labels[] = {"10","9.5","9","8.5","8","7","6","5","4","3","2","1"};
+        const char* graders[] = {"psa","bgs","cgc","sgc"};
+        const char* graderLabels[] = {"PSA","BGS","CGC","SGC"};
+
+        for (int gi = 0; gi < 4; gi++) {
+          if (!graded.containsKey(graders[gi])) continue;
+          JsonObject gr = graded[graders[gi]].as<JsonObject>();
+          for (int vi = 0; vi < 12; vi++) {
+            String key = String(graders[gi]) + grades[vi];   // "psa10"
+            String lbl = String(graderLabels[gi]) + " " + labels[vi]; 
+            addPriceOpt(opts, key.c_str(), lbl.c_str(), graderLabels[gi],
+                        gr[key.c_str()], "EUR");
+          }
         }
       }
     }
-    // ── TCGPlayer (USD) ───────────────────────────────────────────────────────
-    if (prices.containsKey("tcgplayer")) {
-      JsonObject tcp = prices["tcgplayer"].as<JsonObject>();
-      addPriceOpt(opts, "tcp_market", "Market Price", "TCGPlayer", tcp["market"],     "USD");
-      addPriceOpt(opts, "tcp_mid",    "Mid Price",    "TCGPlayer", tcp["mid"],        "USD");
-      addPriceOpt(opts, "tcp_low",    "Low Price",    "TCGPlayer", tcp["low"],        "USD");
-      addPriceOpt(opts, "tcp_high",   "High Price",   "TCGPlayer", tcp["high"],       "USD");
+    
+    // ── TCGPlayer (USD/EUR) ──────────────────────────────────────────────────
+    // Il nuovo JSON usa "tcg_player" con l'underscore
+    const char* tcpKey = prices.containsKey("tcg_player") ? "tcg_player" : "tcgplayer";
+    if (prices.containsKey(tcpKey)) {
+      JsonObject tcp = prices[tcpKey].as<JsonObject>();
+      const char* cur = tcp["currency"] | "USD";
+      
+      // Lookups con fallback esplicito per evitare errori di conversione JSON7
+      addPriceOpt(opts, "tcp_market", "Market Price", "TCGPlayer", 
+                  tcp.containsKey("market_price") ? tcp["market_price"] : tcp["market"], cur);
+      addPriceOpt(opts, "tcp_mid",    "Mid Price",    "TCGPlayer", 
+                  tcp.containsKey("mid_price")    ? tcp["mid_price"]    : tcp["mid"],    cur);
+      addPriceOpt(opts, "tcp_low",    "Low Price",    "TCGPlayer", 
+                  tcp.containsKey("low_price")    ? tcp["low_price"]    : tcp["low"],    cur);
     }
   }
 
   // Naviga il JSON di una carta e restituisce il prezzo per la chiave salvata
   static float extractByKey(JsonObject prices, const String& key) {
-    if (key.startsWith("cm_")) {
+    if (key.startsWith("cm_") || !key.startsWith("tcp_")) {
+      if (!prices.containsKey("cardmarket")) return 0;
       JsonObject cm = prices["cardmarket"].as<JsonObject>();
+      
       if (key == "cm_nm")    return cm["lowest_near_mint"]    | 0.0f;
       if (key == "cm_30d")   return cm["30d_average"]         | 0.0f;
       if (key == "cm_7d")    return cm["7d_average"]          | 0.0f;
       if (key == "cm_nm_de") return cm["lowest_near_mint_DE"] | 0.0f;
       if (key == "cm_nm_fr") return cm["lowest_near_mint_FR"] | 0.0f;
+
+      // Graded
+      String grader = key.substring(0, 3);
+      if (cm.containsKey("graded") && cm["graded"].containsKey(grader)) {
+        return cm["graded"][grader][key.c_str()] | 0.0f;
+      }
     }
-    if (key.startsWith("tcp_")) {
-      JsonObject tcp = prices["tcgplayer"].as<JsonObject>();
-      if (key == "tcp_market") return tcp["market"] | 0.0f;
-      if (key == "tcp_mid")    return tcp["mid"]    | 0.0f;
-      if (key == "tcp_low")    return tcp["low"]    | 0.0f;
+    
+    const char* tcpKey = prices.containsKey("tcg_player") ? "tcg_player" : "tcgplayer";
+    if (key.startsWith("tcp_") && prices.containsKey(tcpKey)) {
+      JsonObject tcp = prices[tcpKey].as<JsonObject>();
+      if (key == "tcp_market") {
+        return tcp.containsKey("market_price") ? (tcp["market_price"] | 0.0f) : (tcp["market"] | 0.0f);
+      }
+      if (key == "tcp_mid") {
+        return tcp.containsKey("mid_price")    ? (tcp["mid_price"]    | 0.0f) : (tcp["mid"]    | 0.0f);
+      }
+      if (key == "tcp_low") {
+        return tcp.containsKey("low_price")    ? (tcp["low_price"]    | 0.0f) : (tcp["low"]    | 0.0f);
+      }
     }
-    // Graded: key = "psa10", "bgs9_5" — grader = primi 3 char
-    String grader = key.substring(0, 3);
-    JsonObject gr = prices["graded"][grader.c_str()].as<JsonObject>();
-    return gr[key.c_str()] | 0.0f;
+    return 0;
   }
 
 public:

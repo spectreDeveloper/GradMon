@@ -74,12 +74,31 @@ class GradMonServer {
     String cardNum   = doc["cardNumber"] | "";
     String grade     = doc["grade"]      | "";
     String price     = doc["price"]      | "";
+    String p2        = doc["p2"]         | "";
+    String p3        = doc["p3"]         | "";
+    String p4        = doc["p4"]         | "";
     String cardId   = doc["cardId"]   | "";
     String priceKey = doc["priceKey"] | "";
+    uint8_t layout  = doc["layout"]   | 0;
+    String imgHex   = doc["image"]    | "";
     if (!name.length()) { err("name mancante"); return; }
 
-    _display->setCard(name, setName, cardNum, grade, price);
-    _storage->saveCard(name, setName, grade, price);
+    uint8_t bmp[280];
+    bool hasBmp = false;
+    if (imgHex.length() >= 560) { // 280 bytes = 560 hex chars
+      hasBmp = true;
+      for (int i = 0; i < 280; i++) {
+        char s[3] = { imgHex[i*2], imgHex[i*2+1], 0 };
+        bmp[i] = (uint8_t)strtol(s, NULL, 16);
+      }
+      _storage->saveCardImage(bmp, 280);
+    } else {
+      _storage->saveCardImage(NULL, 0);
+    }
+
+    _display->setCard(name, setName, cardNum, grade, price, layout, hasBmp ? bmp : nullptr, p2, p3, p4);
+    _storage->saveCard(name, setName, grade, price, p2, p3, p4);
+    _storage->saveLayout(layout);
     if (cardId.length() && priceKey.length())
       _storage->saveRefresh(cardId, cardNum, priceKey);
     ok();
@@ -94,6 +113,10 @@ class GradMonServer {
     out["cardSet"]   = _storage->getCardSet();
     out["cardGrade"] = _storage->getCardGrade();
     out["cardPrice"] = _storage->getCardPrice();
+    out["p2"]        = _storage->getCardP2();
+    out["p3"]        = _storage->getCardP3();
+    out["p4"]        = _storage->getCardP4();
+    out["layout"]    = _storage->getLayout();
     String body; serializeJson(out, body);
     jsonReply(200, body);
   }
