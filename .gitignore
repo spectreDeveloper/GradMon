@@ -1,0 +1,20 @@
+# Secrets — never commit these
+secrets.h
+credentials.h
+*.local.h
+
+# Arduino build artifacts
+build/
+*.elf
+*.bin
+*.map
+*.hex
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
