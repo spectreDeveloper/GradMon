@@ -3,9 +3,9 @@
 
 static SSD1306Wire _disp(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED);
 
-// Bitmap personalizzato per il simbolo Euro (8x10 px)
-const uint8_t PROGMEM euro_bitmap[] = {
-  0x38, 0x44, 0x40, 0xfc, 0x40, 0xfc, 0x40, 0x44, 0x38, 0x00
+// Bitmap Euro in formato XBM (LSB first, 8x10 px)
+const uint8_t PROGMEM euro_xbm[] = {
+  0x1c, 0x22, 0x01, 0x3f, 0x01, 0x3f, 0x01, 0x22, 0x1c, 0x00
 };
 
 void VextON()  { pinMode(Vext, OUTPUT); digitalWrite(Vext, LOW);  }
@@ -23,46 +23,49 @@ class GradMonDisplay {
     return s.length() <= n ? s : s.substring(0, n - 1) + "~";
   }
 
-  // Disegna il simbolo dell'Euro usando un bitmap hardware (8x10)
+  // Disegna il simbolo dell'Euro (XBM è più affidabile di setPixel)
   void drawEuro(int x, int y, bool large = false) {
-    // SSD1306Wire non ha drawBitmap diretto per array piccoli in questo modo, 
-    // usiamo drawXbm o disegniamo pixel per pixel per massima compatibilità.
-    // L'Euro è 8px wide.
-    for (int j = 0; j < 10; j++) {
-      uint8_t b = pgm_read_byte(&euro_bitmap[j]);
-      for (int i = 0; i < 8; i++) {
-        if (b & (0x80 >> i)) {
-          if (large) {
-            _disp.setPixel(x + i*1.2, y + j*1.2); // Scaling brutale ma efficace
-            _disp.setPixel(x + i*1.2 + 1, y + j*1.2);
-          } else {
-            _disp.setPixel(x + i, y + j);
+    if (large) {
+      // Per il font grande (Plain_24), l'euro 8x10 è troppo piccolo.
+      // Lo disegnamo raddoppiato pixel per pixel.
+      for (int j = 0; j < 10; j++) {
+        uint8_t b = pgm_read_byte(&euro_xbm[j]);
+        for (int i = 0; i < 8; i++) {
+          if (b & (1 << i)) {
+            _disp.setPixel(x + i*2,     y + j*2);
+            _disp.setPixel(x + i*2 + 1, y + j*2);
+            _disp.setPixel(x + i*2,     y + j*2 + 1);
+            _disp.setPixel(x + i*2 + 1, y + j*2 + 1);
           }
         }
       }
+    } else {
+      _disp.drawXbm(x, y, 8, 10, euro_xbm);
     }
   }
 
-  void drawPrice(int x, int y, String s, bool large = false, bool right = false) {
+  // Helper per allineamento manuale (risolve errore getTextAlignment)
+  // align: 0=LEFT, 1=RIGHT, 2=CENTER
+  void drawPrice(int x, int y, String s, bool large = false, uint8_t align = 0) {
     String clean = s;
     bool hasEuro = (s.indexOf("€") >= 0 || s.indexOf("\xE2\x82\xAC") >= 0);
     clean.replace("€", ""); clean.replace("\xE2\x82\xAC", "");
     clean.trim();
 
     int tw = _disp.getStringWidth(clean);
-    int symW = 8;
+    int symW = large ? 16 : 8;
     int totalW = tw + symW + 3;
 
     int startX = x;
-    if (right) startX = x - totalW;
-    else if (_disp.getTextAlignment() == TEXT_ALIGN_CENTER) startX = x - (totalW / 2);
+    if (align == 1)      startX = x - totalW; // RIGHT
+    else if (align == 2) startX = x - (totalW / 2); // CENTER
 
     if (hasEuro) {
-      drawEuro(startX, y + (large ? 4 : 2), large);
+      drawEuro(startX, y + (large ? 4 : 1), large);
       _disp.setTextAlignment(TEXT_ALIGN_LEFT);
       _disp.drawString(startX + symW + 3, y, clean);
     } else {
-      _disp.setTextAlignment(right ? TEXT_ALIGN_RIGHT : (startX == x ? TEXT_ALIGN_LEFT : TEXT_ALIGN_CENTER));
+      _disp.setTextAlignment(align == 1 ? TEXT_ALIGN_RIGHT : (align == 2 ? TEXT_ALIGN_CENTER : TEXT_ALIGN_LEFT));
       _disp.drawString(x, y, s);
     }
   }
@@ -130,7 +133,7 @@ public:
       _disp.setFont(ArialMT_Plain_10); _disp.setTextAlignment(TEXT_ALIGN_CENTER);
       _disp.drawString(64, 2, trunc(_name, 26)); _disp.drawLine(10, 14, 118, 14);
       _disp.setFont(ArialMT_Plain_24);
-      drawPrice(64, 18, trunc(_price, 10), true, false);
+      drawPrice(64, 18, trunc(_price, 10), true, 2); // 2 = CENTER
       _disp.setFont(ArialMT_Plain_10); _disp.setTextAlignment(TEXT_ALIGN_CENTER);
       _disp.drawString(64, 48, trunc(_grade, 21));
     } 
@@ -138,7 +141,7 @@ public:
       _disp.setFont(ArialMT_Plain_16); _disp.setTextAlignment(TEXT_ALIGN_LEFT);
       _disp.drawString(0, 4, trunc(_name, 14)); _disp.drawLine(0, 22, 127, 22);
       _disp.setFont(ArialMT_Plain_24);
-      drawPrice(0, 28, trunc(_price, 10), true);
+      drawPrice(0, 28, trunc(_price, 10), true, 0); // 0 = LEFT
     }
     else if (_layout == 3) { // Immagine + Info
       if (_hasImage) _disp.drawXbm(0, 4, 40, 56, _image);
@@ -148,7 +151,7 @@ public:
       String sl = trunc(_set, 10); if (_cardNum.length()) sl += " #" + _cardNum;
       _disp.drawString(44, 16, trunc(sl, 15));
       _disp.setFont(ArialMT_Plain_16);
-      drawPrice(44, 30, trunc(_price, 9), false);
+      drawPrice(44, 30, trunc(_price, 9), false, 0); // 0 = LEFT
       _disp.setFont(ArialMT_Plain_10);
       _disp.drawString(44, 48, trunc(_grade, 15));
     }
@@ -156,11 +159,10 @@ public:
       _disp.setFont(ArialMT_Plain_10); _disp.setTextAlignment(TEXT_ALIGN_CENTER);
       _disp.drawString(64, 0, trunc(_name, 26));
       _disp.drawLine(0, 11, 127, 11);
-      _disp.setTextAlignment(TEXT_ALIGN_LEFT);
-      if (_price.length()) drawPrice(0, 14, _price);
-      if (_p2.length())    drawPrice(0, 26, _p2);
-      if (_p3.length())    drawPrice(0, 38, _p3);
-      if (_p4.length())    drawPrice(0, 50, _p4);
+      if (_price.length()) drawPrice(0, 14, _price, false, 0);
+      if (_p2.length())    drawPrice(0, 26, _p2,    false, 0);
+      if (_p3.length())    drawPrice(0, 38, _p3,    false, 0);
+      if (_p4.length())    drawPrice(0, 51, _p4,    false, 0);
     }
     else { // Classico
       _disp.setFont(ArialMT_Plain_10); _disp.setTextAlignment(TEXT_ALIGN_LEFT);
@@ -170,7 +172,7 @@ public:
       _disp.drawLine(0, 26, 127, 26); _disp.drawLine(0, 28, 127, 28);
       _disp.setFont(ArialMT_Plain_16);
       _disp.drawString(0, 31, trunc(_grade, 8));
-      drawPrice(127, 31, trunc(_price, 9), false, true);
+      drawPrice(127, 31, trunc(_price, 9), false, 1); // 1 = RIGHT
     }
     _disp.display(); _dirty = false;
   }
