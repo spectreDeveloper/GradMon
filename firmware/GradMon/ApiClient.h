@@ -1,39 +1,28 @@
 #pragma once
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include "config.h"
 
-// ── Data types ────────────────────────────────────────────────────────────────
-struct CardResult {
-  String id;
-  String name;
-  String setName;
-  String year;
-  String imageUrl;
-};
-
-struct PriceResult {
-  float  value   = 0;
-  String currency;
-  bool   valid   = false;
-  String error;
-};
-
 // ── ApiClient ─────────────────────────────────────────────────────────────────
-// All TCGgo calls are proxied through the ESP32 so the API key is never
-// exposed to the browser.
+// Tutte le chiamate TCGgo passano dall'ESP32 → l'API key non raggiunge mai
+// il browser.
 //
-// IMPORTANT: Endpoint paths & response field names may need adjustment once
-// you verify the exact schema at https://www.tcggo.com/api-docs/v1/
+// Autenticazione: X-RapidAPI-Key + X-RapidAPI-Host (RapidAPI platform)
+// Endpoint usati:
+//   GET /cards/search?q=name:{query}   → cerca carte
+// La risposta include già prices.graded.{psa|bgs|cgc} e prices.cardmarket/tcg_player
 class ApiClient {
   String _apiKey;
 
-  bool _get(const String& url, String& body, String& err) {
+  bool _get(const String& path, String& body, String& err) {
+    WiFiClientSecure client;
+    client.setInsecure(); // per produzione: aggiungere CA cert
     HTTPClient http;
-    http.begin(url);
-    // NOTE: for production add proper CA cert instead of setInsecure()
-    http.setInsecure();
-    http.addHeader("Authorization", "Bearer " + _apiKey);
+    String url = String(TCGGO_BASE_URL) + path;
+    http.begin(client, url);
+    http.addHeader("X-RapidAPI-Key",  _apiKey);
+    http.addHeader("X-RapidAPI-Host", TCGGO_API_HOST);
     http.addHeader("Accept", "application/json");
     http.setTimeout(8000);
 
@@ -49,68 +38,71 @@ class ApiClient {
   }
 
 public:
-  void setApiKey(const String& key) { _apiKey = key; }
-  bool ready() const { return _apiKey.length() > 0; }
+  void   setApiKey(const String& k) { _apiKey = k; }
+  bool   ready() const              { return _apiKey.length() > 0; }
 
-  // Search cards — fills `results` (up to 10 items)
-  bool searchCards(const String& query, std::vector<CardResult>& results, String& err) {
-    results.clear();
-    if (!ready()) { err = "No API key"; return false; }
+  // Cerca carte e costruisce la risposta JSON per il browser.
+  // Restituisce fino a 10 risultati con name, set, card_number, image e prices.
+  bool searchCards(const String& query, String& outJson, String& err) {
+    if (!ready()) { err = "API key mancante"; return false; }
 
     String encoded = query;
     encoded.replace(" ", "%20");
-    String url = String(TCGGO_BASE_URL) + "/cards/search?q=" + encoded + "&limit=10";
+    String path = "/cards/search?q=name:" + encoded;
 
-    String body;
-    if (!_get(url, body, err)) return false;
+    String raw;
+    if (!_get(path, raw, err)) return false;
 
-    DynamicJsonDocument doc(8192);
-    if (deserializeJson(doc, body) != DeserializationError::Ok) {
+    // Documento input: può essere grande (molte carte con prezzi)
+    DynamicJsonDocument in(24576);
+    if (deserializeJson(in, raw) != DeserializationError::Ok) {
       err = "JSON parse error";
       return false;
     }
 
-    // Adjust field names to match actual TCGgo response schema
-    JsonArray arr = doc.is<JsonArray>() ? doc.as<JsonArray>()
-                                        : doc["data"].as<JsonArray>();
-    for (JsonObject item : arr) {
-      CardResult r;
-      r.id       = item["id"]       | item["card_id"]    | "";
-      r.name     = item["name"]     | item["card_name"]  | "";
-      r.setName  = item["set"]      | item["set_name"]   | "";
-      r.year     = item["year"]     | "";
-      r.imageUrl = item["image"]    | item["image_url"]  | "";
-      if (r.id.length() && r.name.length()) results.push_back(r);
+    // Prendiamo l'array "data" o direttamente l'array root
+    JsonArray src = in.is<JsonArray>() ? in.as<JsonArray>()
+                                       : in["data"].as<JsonArray>();
+
+    // Documento output ridotto: solo i campi necessari
+    DynamicJsonDocument out(16384);
+    out["ok"] = true;
+    JsonArray arr = out.createNestedArray("results");
+
+    int count = 0;
+    for (JsonObject card : src) {
+      if (count >= 10) break;
+      JsonObject o = arr.createNestedObject();
+      o["id"]         = card["id"];
+      o["name"]       = card["name"];
+      o["setName"]    = card["episode"]["name"];
+      o["cardNumber"] = card["card_number"];
+      o["imageUrl"]   = card["image"];
+
+      // Copia il sotto-oggetto prices (graded + market)
+      JsonObject prices = o.createNestedObject("prices");
+      if (card.containsKey("prices")) {
+        JsonObject src_p = card["prices"].as<JsonObject>();
+
+        // Prezzi ungraded
+        if (src_p.containsKey("tcg_player"))
+          prices["usd"] = src_p["tcg_player"]["market_price"];
+        if (src_p.containsKey("cardmarket"))
+          prices["eur"] = src_p["cardmarket"]["market_price"];
+
+        // Prezzi graded: psa, bgs, cgc, sgc
+        if (src_p.containsKey("graded")) {
+          JsonObject graded    = prices.createNestedObject("graded");
+          JsonObject src_graded = src_p["graded"].as<JsonObject>();
+          for (JsonPair kv : src_graded) {
+            graded[kv.key()] = kv.value();
+          }
+        }
+      }
+      count++;
     }
-    return true;
-  }
 
-  // Get market price for a specific card + grader + grade
-  bool getPrice(const String& cardId, const String& grader,
-                const String& grade, const String& currency,
-                PriceResult& result) {
-    if (!ready()) { result.error = "No API key"; return false; }
-
-    // Adjust path to match actual TCGgo price endpoint
-    String url = String(TCGGO_BASE_URL)
-               + "/cards/" + cardId + "/prices"
-               + "?grader=" + grader
-               + "&grade=" + grade
-               + "&currency=" + currency;
-
-    String body;
-    if (!_get(url, body, result.error)) return false;
-
-    DynamicJsonDocument doc(2048);
-    if (deserializeJson(doc, body) != DeserializationError::Ok) {
-      result.error = "JSON parse error";
-      return false;
-    }
-
-    // Adjust field names to match actual TCGgo price response
-    result.value    = doc["price"] | doc["market_price"] | doc["value"] | 0.0f;
-    result.currency = currency;
-    result.valid    = true;
+    serializeJson(out, outJson);
     return true;
   }
 };

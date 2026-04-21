@@ -1,14 +1,14 @@
 /*
  * GradMon — Heltec ESP32 WiFi Kit 32 V3
  *
- * Libraries required (install via Arduino Library Manager):
- *   - U8g2          by olikraus
- *   - ArduinoJson   by Benoit Blanchon  (v7)
+ * Libraries required (Arduino Library Manager):
+ *   - Heltec ESP32 Dev-Boards  by Heltec Automation
+ *   - ArduinoJson              by Benoit Blanchon (v7)
  *
  * Board support:
  *   File → Preferences → Additional boards URL:
- *   https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series/releases/download/0.0.9/package_heltec_esp32_index.json
- *   Then: Tools → Board → Heltec ESP32 Series → WiFi Kit 32(V3)
+ *   https://resource.heltec.cn/download/package_heltec_esp32_index.json
+ *   Tools → Board → Heltec ESP32 Series → WiFi Kit 32(V3)
  */
 
 #include <WiFi.h>
@@ -27,8 +27,7 @@ bool apMode = false;
 
 void setup() {
   Serial.begin(115200);
-
-  oled.begin();
+  oled.begin();   // abilita Vext GPIO36 LOW, poi inizializza SSD1306
   oled.splash();
 
   storage.begin();
@@ -39,7 +38,7 @@ void setup() {
   }
   if (storage.getCardName().length()) {
     oled.setCard(storage.getCardName(), storage.getCardSet(),
-                 storage.getCardGrade(), storage.getCardPrice());
+                 "", storage.getCardGrade(), storage.getCardPrice());
   }
 
   // Try to connect to saved WiFi

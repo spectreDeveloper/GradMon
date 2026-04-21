@@ -1,95 +1,158 @@
 #pragma once
-#include <Wire.h>
-#include <U8g2lib.h>
-#include "config.h"
+#include "HT_SSD1306Wire.h"
+
+static SSD1306Wire _disp(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED);
+
+void VextON()  { pinMode(Vext, OUTPUT); digitalWrite(Vext, LOW);  }
+void VextOFF() { pinMode(Vext, OUTPUT); digitalWrite(Vext, HIGH); }
 
 class GradMonDisplay {
-  // SSD1306 128×64 — hardware I2C
-  U8G2_SSD1306_128X64_NONAME_F_HW_I2C _u8g2;
-
-  String _line1, _line2, _line3, _line4;
+  String _name, _set, _cardNum, _grade, _price;
   bool   _dirty = false;
 
-  static String trunc(const String& s, uint8_t maxChars) {
-    if (s.length() <= maxChars) return s;
-    return s.substring(0, maxChars - 1) + "~";
+  static String trunc(const String& s, uint8_t n) {
+    return s.length() <= n ? s : s.substring(0, n - 1) + "~";
   }
 
 public:
-  GradMonDisplay()
-    : _u8g2(U8G2_R0, OLED_RST, OLED_SCL, OLED_SDA) {}
-
   void begin() {
-    Wire.begin(OLED_SDA, OLED_SCL);
-    _u8g2.begin();
+    VextON();
+    delay(100);
+    _disp.init();
+    _disp.setFont(ArialMT_Plain_10);
   }
 
+  // ── Splash screen ──────────────────────────────────────────────────────────
   void splash() {
-    _u8g2.clearBuffer();
-    _u8g2.setFont(u8g2_font_10x20_tf);
-    _u8g2.drawStr(14, 28, "GradMon");
-    _u8g2.setFont(u8g2_font_6x10_tf);
-    _u8g2.drawStr(22, 48, "v1.0  Loading...");
-    _u8g2.sendBuffer();
-    delay(1800);
+    _disp.clear();
+
+    // Cornice esterna
+    _disp.drawRect(0, 0, 128, 64);
+
+    // Titolo centrato grande
+    _disp.setTextAlignment(TEXT_ALIGN_CENTER);
+    _disp.setFont(ArialMT_Plain_24);
+    _disp.drawString(64, 10, "GradMon");
+
+    // Linea decorativa sotto il titolo
+    _disp.drawLine(10, 38, 118, 38);
+
+    // Sottotitolo
+    _disp.setFont(ArialMT_Plain_10);
+    _disp.drawString(64, 44, "Smart Card Display");
+
+    _disp.display();
+    delay(2000);
   }
 
-  void showText(const char* l1, const char* l2 = "", const char* l3 = "", const char* l4 = "") {
-    _u8g2.clearBuffer();
-    _u8g2.setFont(u8g2_font_6x10_tf);
-    _u8g2.drawStr(0,  10, l1);
-    _u8g2.drawStr(0,  24, l2);
-    _u8g2.drawStr(0,  38, l3);
-    _u8g2.drawStr(0,  52, l4);
-    _u8g2.sendBuffer();
+  // ── Schermata generica (stato, messaggi di boot) ───────────────────────────
+  void showText(const char* l1, const char* l2 = "",
+                const char* l3 = "", const char* l4 = "") {
+    _disp.clear();
+    _disp.setTextAlignment(TEXT_ALIGN_LEFT);
+    _disp.setFont(ArialMT_Plain_10);
+    _disp.drawString(0,  0, l1);
+    _disp.drawString(0, 14, l2);
+    _disp.drawString(0, 28, l3);
+    _disp.drawString(0, 42, l4);
+    _disp.display();
   }
 
+  // ── AP Setup mode ──────────────────────────────────────────────────────────
   void showAPMode() {
-    _u8g2.clearBuffer();
-    _u8g2.setFont(u8g2_font_6x10_tf);
-    _u8g2.drawStr(0, 10, "== Setup Mode ==");
-    _u8g2.drawStr(0, 24, "WiFi: GradMon-Setup");
-    _u8g2.drawStr(0, 38, "Poi apri browser:");
-    _u8g2.drawStr(0, 52, AP_IP);
-    _u8g2.sendBuffer();
+    _disp.clear();
+    _disp.drawRect(0, 0, 128, 64);
+
+    _disp.setTextAlignment(TEXT_ALIGN_CENTER);
+    _disp.setFont(ArialMT_Plain_10);
+    _disp.drawString(64,  4, "[ SETUP MODE ]");
+    _disp.drawLine(4, 17, 124, 17);
+
+    _disp.setTextAlignment(TEXT_ALIGN_LEFT);
+    _disp.drawString(4, 20, "WiFi: GradMon-Setup");
+    _disp.drawString(4, 34, "Apri il browser:");
+
+    _disp.setFont(ArialMT_Plain_16);
+    _disp.setTextAlignment(TEXT_ALIGN_CENTER);
+    _disp.drawString(64, 46, "192.168.4.1");
+
+    _disp.display();
   }
 
+  // ── WiFi connesso ──────────────────────────────────────────────────────────
   void showConnected(const String& ip) {
-    _u8g2.clearBuffer();
-    _u8g2.setFont(u8g2_font_6x10_tf);
-    _u8g2.drawStr(0, 10, "WiFi connesso!");
-    _u8g2.drawStr(0, 24, "Apri il browser:");
-    _u8g2.drawStr(0, 38, ip.c_str());
-    _u8g2.drawStr(0, 52, "per configurare");
-    _u8g2.sendBuffer();
+    _disp.clear();
+    _disp.drawRect(0, 0, 128, 64);
+
+    _disp.setTextAlignment(TEXT_ALIGN_CENTER);
+    _disp.setFont(ArialMT_Plain_10);
+    _disp.drawString(64,  4, "WIFI CONNESSO");
+    _disp.drawLine(4, 17, 124, 17);
+    _disp.drawString(64, 20, "Apri il browser:");
+
+    _disp.setFont(ArialMT_Plain_16);
+    _disp.drawString(64, 36, ip);
+
+    // Indicatore piccolo
+    _disp.setFont(ArialMT_Plain_10);
+    _disp.drawString(64, 54, "GradMon pronto");
+
+    _disp.display();
   }
 
-  // Called from web UI when user presses "Invia al display"
+  // ── Aggiorna carta da mostrare ─────────────────────────────────────────────
   void setCard(const String& name, const String& set,
-               const String& grade, const String& price) {
-    _line1 = trunc(name,  21);
-    _line2 = trunc(set,   21);
-    _line3 = trunc(grade, 21);
-    _line4 = trunc(price, 21);
-    _dirty = true;
+               const String& cardNum, const String& grade,
+               const String& price) {
+    _name    = name;
+    _set     = set;
+    _cardNum = cardNum;
+    _grade   = grade;
+    _price   = price;
+    _dirty   = true;
   }
 
-  // Call from loop()
+  // ── Render carta sul display (chiamato da loop) ────────────────────────────
+  //
+  //  ┌──────────────────────────────┐
+  //  │ Charizard Holo Rare          │  Plain_10  y=2
+  //  │ Base Set • 4/102             │  Plain_10  y=14
+  //  ├══════════════════════════════┤  y=26
+  //  │ PSA 10          $ 2,450      │  Plain_16  y=30  (left / right)
+  //  │            ● LIVE            │  Plain_10  y=52
+  //  └──────────────────────────────┘
   void update() {
     if (!_dirty) return;
-    _u8g2.clearBuffer();
+    _disp.clear();
 
-    // Two-font layout: small for name/set, larger for grade/price
-    _u8g2.setFont(u8g2_font_6x10_tf);
-    _u8g2.drawStr(0, 10, _line1.c_str());
-    _u8g2.drawStr(0, 22, _line2.c_str());
-    _u8g2.drawHLine(0, 26, 128);
+    // ── Zona superiore: nome e set ──
+    _disp.setTextAlignment(TEXT_ALIGN_LEFT);
+    _disp.setFont(ArialMT_Plain_10);
+    _disp.drawString(0, 2, trunc(_name, 21));
 
-    _u8g2.setFont(u8g2_font_7x13_tf);
-    _u8g2.drawStr(0, 42, _line3.c_str());
-    _u8g2.drawStr(0, 60, _line4.c_str());
+    // Set + numero carta
+    String setLine = trunc(_set, 15);
+    if (_cardNum.length()) setLine += " #" + _cardNum;
+    _disp.drawString(0, 14, trunc(setLine, 21));
 
-    _u8g2.sendBuffer();
+    // ── Separatore doppio ──
+    _disp.drawLine(0, 26, 127, 26);
+    _disp.drawLine(0, 28, 127, 28);
+
+    // ── Zona inferiore: grade (sinistra) + prezzo (destra) ──
+    _disp.setFont(ArialMT_Plain_16);
+    _disp.setTextAlignment(TEXT_ALIGN_LEFT);
+    _disp.drawString(0, 31, trunc(_grade, 8));
+
+    _disp.setTextAlignment(TEXT_ALIGN_RIGHT);
+    _disp.drawString(127, 31, trunc(_price, 9));
+
+    // ── Indicatore LIVE in basso ──
+    _disp.setFont(ArialMT_Plain_10);
+    _disp.setTextAlignment(TEXT_ALIGN_CENTER);
+    _disp.drawString(64, 52, "* LIVE PRICE *");
+
+    _disp.display();
     _dirty = false;
   }
 };
