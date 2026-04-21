@@ -41,13 +41,13 @@ public:
   // ── Dati per il refresh automatico (cardId + chiave prezzo + cardNumber) ──
   // graderKey = es. "psa10", "bgs9_5" — costruito dal browser e salvato qui
   void saveRefresh(const String& cardId, const String& cardNum,
-                   const String& graderKey) {
-    _prefs.putString("r_id",     cardId);
-    _prefs.putString("r_num",    cardNum);
-    _prefs.putString("r_grkey",  graderKey);
+                   const String& priceKey) {
+    _prefs.putString("r_id",    cardId);
+    _prefs.putString("r_num",   cardNum);
+    _prefs.putString("r_pkey",  priceKey);   // es. "cm_nm", "psa10"
   }
-  String getRefreshCardId()    { return _prefs.getString("r_id",    ""); }
-  String getRefreshCardNum()   { return _prefs.getString("r_num",   ""); }
-  String getRefreshGraderKey() { return _prefs.getString("r_grkey", ""); }
-  bool   hasRefreshData()      { return _prefs.getString("r_id", "").length() > 0; }
+  String getRefreshCardId()   { return _prefs.getString("r_id",   ""); }
+  String getRefreshCardNum()  { return _prefs.getString("r_num",  ""); }
+  String getRefreshPriceKey() { return _prefs.getString("r_pkey", ""); }
+  bool   hasRefreshData()     { return _prefs.getString("r_id",   "").length() > 0; }
 };

@@ -74,15 +74,14 @@ class GradMonServer {
     String cardNum   = doc["cardNumber"] | "";
     String grade     = doc["grade"]      | "";
     String price     = doc["price"]      | "";
-    String cardId    = doc["cardId"]     | "";
-    String graderKey = doc["graderKey"]  | "";
+    String cardId   = doc["cardId"]   | "";
+    String priceKey = doc["priceKey"] | "";
     if (!name.length()) { err("name mancante"); return; }
 
     _display->setCard(name, setName, cardNum, grade, price);
     _storage->saveCard(name, setName, grade, price);
-    // Salva i dati per il refresh automatico ogni 24h
-    if (cardId.length() && graderKey.length())
-      _storage->saveRefresh(cardId, cardNum, graderKey);
+    if (cardId.length() && priceKey.length())
+      _storage->saveRefresh(cardId, cardNum, priceKey);
     ok();
   }
 

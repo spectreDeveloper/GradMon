@@ -49,15 +49,15 @@ void doRefresh() {
   if (!api.ready())              return;
   if (WiFi.status() != WL_CONNECTED) return;
 
-  String cardId    = storage.getRefreshCardId();
-  String graderKey = storage.getRefreshGraderKey();
-  String currency  = storage.getCurrency();
+  String cardId   = storage.getRefreshCardId();
+  String priceKey = storage.getRefreshPriceKey();
+  String currency = storage.getCurrency();
 
-  Serial.println("[refresh] cardId=" + cardId + " key=" + graderKey);
+  Serial.println("[refresh] cardId=" + cardId + " key=" + priceKey);
   oled.showText("Aggiornamento...", storage.getCardName().c_str());
 
   float price; String err;
-  if (api.refreshPrice(cardId, graderKey, currency, price, err)) {
+  if (api.refreshPrice(cardId, priceKey, price, err)) {
     String formatted = formatPrice(price, currency);
     String name  = storage.getCardName();
     String set   = storage.getCardSet();
