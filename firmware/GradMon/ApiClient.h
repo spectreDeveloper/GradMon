@@ -20,9 +20,9 @@ class ApiClient {
     client.setInsecure();
     HTTPClient http;
     http.begin(client, String(TCGGO_BASE_URL) + path);
-    http.addHeader("X-RapidAPI-Key",  _apiKey);
-    http.addHeader("X-RapidAPI-Host", TCGGO_API_HOST);
-    http.addHeader("Accept", "application/json");
+    http.addHeader("x-rapidapi-key",  _apiKey);
+    http.addHeader("x-rapidapi-host", TCGGO_API_HOST);
+    http.addHeader("Content-Type", "application/json");
     http.setTimeout(10000);
     int code = http.GET();
     if (code == 200) { body = http.getString(); http.end(); return true; }
@@ -68,14 +68,21 @@ public:
 
     String enc = query; enc.replace(" ", "%20");
     String raw;
-    if (!_get("/cards/search?q=name:" + enc, raw, err)) return false;
+    if (!_get("/pokemon/cards/search?search=" + enc + "&sort=relevance", raw, err)) return false;
+
+    // Log primi 500 char per debug struttura risposta
+    Serial.println("[API] response: " + raw.substring(0, 500));
 
     DynamicJsonDocument in(24576);
     if (deserializeJson(in, raw) != DeserializationError::Ok) {
       err = "JSON parse error"; return false;
     }
-    JsonArray src = in.is<JsonArray>() ? in.as<JsonArray>()
-                                       : in["data"].as<JsonArray>();
+    // Supporta: array root, {"data":[...]}, {"cards":[...]}, {"results":[...]}
+    JsonArray src;
+    if      (in.is<JsonArray>())              src = in.as<JsonArray>();
+    else if (in["data"].is<JsonArray>())      src = in["data"].as<JsonArray>();
+    else if (in["cards"].is<JsonArray>())     src = in["cards"].as<JsonArray>();
+    else if (in["results"].is<JsonArray>())   src = in["results"].as<JsonArray>();
 
     DynamicJsonDocument out(16384);
     out["ok"] = true;
@@ -85,11 +92,15 @@ public:
     for (JsonObject card : src) {
       if (n >= 10) break;
       JsonObject o = arr.createNestedObject();
-      o["id"]         = card["id"];
-      o["name"]       = card["name"];
-      o["setName"]    = card["episode"]["name"];
-      o["cardNumber"] = card["card_number"];
-      o["imageUrl"]   = card["image"];
+      // Campi con fallback per nomi alternativi
+      o["id"]         = card["id"]        | card["card_id"]  | "";
+      o["name"]       = card["name"]      | card["card_name"]| "";
+      // Set: prova episode.name, set.name, expansion, set
+      const char* sn = card["episode"]["name"] | card["set"]["name"]
+                     | card["expansion"]       | card["set"] | "";
+      o["setName"]    = sn;
+      o["cardNumber"] = card["card_number"] | card["number"] | card["cardNumber"] | "";
+      o["imageUrl"]   = card["image"]       | card["image_url"] | card["imageUrl"] | "";
 
       JsonObject prices = o.createNestedObject("prices");
       if (card.containsKey("prices")) {

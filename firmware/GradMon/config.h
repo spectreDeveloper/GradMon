@@ -7,10 +7,9 @@
 #define AP_SSID "GradMon-Setup"
 #define AP_IP   "192.168.4.1"
 
-// ── TCGgo / RapidAPI ─────────────────────────────────────────────────────────
-// Base URL e host per l'API TCGgo su RapidAPI
-#define TCGGO_API_HOST "pokemon-tcg-api.p.rapidapi.com"
-#define TCGGO_BASE_URL "https://pokemon-tcg-api.p.rapidapi.com"
+// ── Cardmarket TCG API (RapidAPI) ─────────────────────────────────────────────
+#define TCGGO_API_HOST "cardmarket-api-tcg.p.rapidapi.com"
+#define TCGGO_BASE_URL "https://cardmarket-api-tcg.p.rapidapi.com"
 
 // ── Timing ───────────────────────────────────────────────────────────────────
 #define WIFI_TIMEOUT_MS 10000
