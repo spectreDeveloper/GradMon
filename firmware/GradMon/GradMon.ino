@@ -23,25 +23,72 @@ GradMonDisplay oled;
 ApiClient      api;
 GradMonServer  server(&storage, &api, &oled);
 
-bool apMode = false;
+// ── Refresh automatico ogni 24h ───────────────────────────────────────────────
+#define REFRESH_INTERVAL_MS (24UL * 60UL * 60UL * 1000UL)
+unsigned long lastRefreshMs = 0;
+bool          firstRefreshDone = false;
 
+// Simbolo valuta per formattare il prezzo sull'OLED
+String currencySymbol(const String& c) {
+  if (c == "EUR") return "€";
+  if (c == "GBP") return "£";
+  if (c == "JPY") return "¥";
+  return "$";
+}
+
+String formatPrice(float val, const String& currency) {
+  char buf[16];
+  // Nessun decimale se cifra tonda, altrimenti 2
+  if ((long)val == val) snprintf(buf, sizeof(buf), "%.0f", val);
+  else                  snprintf(buf, sizeof(buf), "%.2f", val);
+  return currencySymbol(currency) + String(buf);
+}
+
+void doRefresh() {
+  if (!storage.hasRefreshData()) return;
+  if (!api.ready())              return;
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  String cardId    = storage.getRefreshCardId();
+  String graderKey = storage.getRefreshGraderKey();
+  String currency  = storage.getCurrency();
+
+  Serial.println("[refresh] cardId=" + cardId + " key=" + graderKey);
+  oled.showText("Aggiornamento...", storage.getCardName().c_str());
+
+  float price; String err;
+  if (api.refreshPrice(cardId, graderKey, currency, price, err)) {
+    String formatted = formatPrice(price, currency);
+    String name  = storage.getCardName();
+    String set   = storage.getCardSet();
+    String num   = storage.getRefreshCardNum();
+    String grade = storage.getCardGrade();
+
+    oled.setCard(name, set, num, grade, formatted);
+    storage.saveCard(name, set, grade, formatted);
+    lastRefreshMs = millis();
+    Serial.println("[refresh] OK: " + formatted);
+  } else {
+    // Mostra ugualmente i dati vecchi
+    oled.setCard(storage.getCardName(), storage.getCardSet(),
+                 storage.getRefreshCardNum(),
+                 storage.getCardGrade(), storage.getCardPrice());
+    Serial.println("[refresh] ERR: " + err);
+  }
+  firstRefreshDone = true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
-  oled.begin();   // abilita Vext GPIO36 LOW, poi inizializza SSD1306
+  oled.begin();
   oled.splash();
 
   storage.begin();
 
-  // Restore API key and saved card from flash
-  if (storage.hasApiKey()) {
-    api.setApiKey(storage.getApiKey());
-  }
-  if (storage.getCardName().length()) {
-    oled.setCard(storage.getCardName(), storage.getCardSet(),
-                 "", storage.getCardGrade(), storage.getCardPrice());
-  }
+  if (storage.hasApiKey()) api.setApiKey(storage.getApiKey());
 
-  // Try to connect to saved WiFi
+  // Connessione WiFi
   String ssid = storage.getSSID();
   String pass = storage.getPass();
 
@@ -50,28 +97,43 @@ void setup() {
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid.c_str(), pass.c_str());
 
-    unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_TIMEOUT_MS) {
+    unsigned long t = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t < WIFI_TIMEOUT_MS)
       delay(200);
-    }
   }
 
   if (WiFi.status() == WL_CONNECTED) {
     oled.showConnected(WiFi.localIP().toString());
     server.begin(false);
     Serial.println("IP: " + WiFi.localIP().toString());
+    delay(1500);
+    // Refresh immediato al boot se c'è una carta salvata
+    doRefresh();
+    lastRefreshMs = millis();
   } else {
-    // No credentials or connection failed → start AP setup mode
-    apMode = true;
+    // Nessun WiFi → AP setup mode
     WiFi.mode(WIFI_AP);
     WiFi.softAP(AP_SSID);
     oled.showAPMode();
     server.begin(true);
     Serial.println("AP mode: " AP_SSID);
   }
+
+  // Mostra la carta salvata se non è stato fatto il refresh
+  if (!firstRefreshDone && storage.getCardName().length()) {
+    oled.setCard(storage.getCardName(), storage.getCardSet(),
+                 storage.getRefreshCardNum(),
+                 storage.getCardGrade(), storage.getCardPrice());
+  }
 }
 
 void loop() {
   server.handle();
   oled.update();
+
+  // Refresh automatico ogni 24h
+  if (WiFi.status() == WL_CONNECTED &&
+      millis() - lastRefreshMs >= REFRESH_INTERVAL_MS) {
+    doRefresh();
+  }
 }

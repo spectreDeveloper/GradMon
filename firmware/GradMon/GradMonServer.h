@@ -65,19 +65,24 @@ class GradMonServer {
     jsonReply(200, outJson);
   }
 
-  // Riceve nome, set, cardNumber, grade, price già formattato dal browser
+  // Riceve nome, set, cardNumber, grade, price + cardId e graderKey per il refresh
   void handleSetDisplay() {
     DynamicJsonDocument doc(512);
     if (deserializeJson(doc, _srv.arg("plain"))) { err("JSON invalido"); return; }
-    String name     = doc["name"]       | "";
-    String setName  = doc["setName"]    | "";
-    String cardNum  = doc["cardNumber"] | "";
-    String grade    = doc["grade"]      | "";
-    String price    = doc["price"]      | "";
+    String name      = doc["name"]       | "";
+    String setName   = doc["setName"]    | "";
+    String cardNum   = doc["cardNumber"] | "";
+    String grade     = doc["grade"]      | "";
+    String price     = doc["price"]      | "";
+    String cardId    = doc["cardId"]     | "";
+    String graderKey = doc["graderKey"]  | "";
     if (!name.length()) { err("name mancante"); return; }
 
     _display->setCard(name, setName, cardNum, grade, price);
     _storage->saveCard(name, setName, grade, price);
+    // Salva i dati per il refresh automatico ogni 24h
+    if (cardId.length() && graderKey.length())
+      _storage->saveRefresh(cardId, cardNum, graderKey);
     ok();
   }
 

@@ -270,15 +270,19 @@ function onGradeChange(){
 // ── Invia al display ──────────────────────────────────────────────────────────
 async function sendToDisplay(){
   if(!SEL||!LAST_PRICE) return;
-  var grader = document.getElementById('grader').value.toUpperCase();
-  var grade  = document.getElementById('grade').value.replace('_','.');
+  var graderVal = document.getElementById('grader').value;          // 'psa','bgs'…
+  var gradeVal  = document.getElementById('grade').value;           // '10','9_5'…
+  var graderKey = graderVal + gradeVal;                             // 'psa10','bgs9_5'
+  var gradeDisp = graderVal.toUpperCase()+' '+gradeVal.replace('_','.');
 
   var payload={
     name:      SEL.name,
     setName:   SEL.setName||'',
     cardNumber:SEL.cardNumber||'',
-    grade:     grader+' '+grade,
-    price:     LAST_PRICE.formatted
+    grade:     gradeDisp,
+    price:     LAST_PRICE.formatted,
+    cardId:    SEL.id||'',          // per il refresh 24h
+    graderKey: graderKey            // es. "psa10", "bgs9_5"
   };
   setStatus('gradeStatus','Invio in corso...','info');
   var r=await fetch('/api/display',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});

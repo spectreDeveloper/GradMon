@@ -12,20 +12,20 @@ public:
     _prefs.putString("ssid", ssid);
     _prefs.putString("pass", pass);
   }
-  void clearWifi() { _prefs.remove("ssid"); _prefs.remove("pass"); }
-  String getSSID() { return _prefs.getString("ssid", ""); }
-  String getPass() { return _prefs.getString("pass", ""); }
+  void   clearWifi() { _prefs.remove("ssid"); _prefs.remove("pass"); }
+  String getSSID()   { return _prefs.getString("ssid", ""); }
+  String getPass()   { return _prefs.getString("pass", ""); }
 
-  // ── API key (stored only in NVS flash, never returned to browser) ──────────
-  void saveApiKey(const String& key) { _prefs.putString("apikey", key); }
+  // ── API key (solo in NVS, mai esposta al browser) ─────────────────────────
+  void   saveApiKey(const String& k) { _prefs.putString("apikey", k); }
   String getApiKey()  { return _prefs.getString("apikey", ""); }
   bool   hasApiKey()  { return _prefs.getString("apikey", "").length() > 0; }
 
-  // ── User preferences ───────────────────────────────────────────────────────
-  void saveCurrency(const String& c) { _prefs.putString("currency", c); }
+  // ── Preferenze utente ─────────────────────────────────────────────────────
+  void   saveCurrency(const String& c) { _prefs.putString("currency", c); }
   String getCurrency() { return _prefs.getString("currency", "USD"); }
 
-  // ── Currently displayed card (persists across reboots) ────────────────────
+  // ── Carta corrente (persiste ai riavvii) ──────────────────────────────────
   void saveCard(const String& name, const String& set,
                 const String& grade, const String& price) {
     _prefs.putString("c_name",  name);
@@ -37,4 +37,17 @@ public:
   String getCardSet()   { return _prefs.getString("c_set",   ""); }
   String getCardGrade() { return _prefs.getString("c_grade", ""); }
   String getCardPrice() { return _prefs.getString("c_price", ""); }
+
+  // ── Dati per il refresh automatico (cardId + chiave prezzo + cardNumber) ──
+  // graderKey = es. "psa10", "bgs9_5" — costruito dal browser e salvato qui
+  void saveRefresh(const String& cardId, const String& cardNum,
+                   const String& graderKey) {
+    _prefs.putString("r_id",     cardId);
+    _prefs.putString("r_num",    cardNum);
+    _prefs.putString("r_grkey",  graderKey);
+  }
+  String getRefreshCardId()    { return _prefs.getString("r_id",    ""); }
+  String getRefreshCardNum()   { return _prefs.getString("r_num",   ""); }
+  String getRefreshGraderKey() { return _prefs.getString("r_grkey", ""); }
+  bool   hasRefreshData()      { return _prefs.getString("r_id", "").length() > 0; }
 };
